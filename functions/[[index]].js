@@ -31,7 +31,7 @@ function newResponseOptionsFromResponse(response, replacementHeaders) {
 
 /// Checks if the status code is some form of HTTP success
 function isSuccessStatusCodeNumber(code) {
-    if (code >= 200 || code <= 400) { 
+    if (code >= 200 && code < 400) {
         return true;
     } else {
         return false;
@@ -85,11 +85,10 @@ export async function onRequest(context) {
     
     // 2. Perform the request to the destination
     const response = await fetch(requestURLString, newRequestOptionsFromRequest(context.request));
-    logObjectIfTrue(response.headers, ISDEBUG);
+    logObjectIfTrue(response.status + ": " + response.statusText, ISDEBUG);
 
     // 3. Guard statement to bail if the response code is not success
     if (isSuccessStatusCodeNumber(response.status) === false) {
-        logObjectIfTrue("---- BAD STATUS", ISDEBUG);
         return response; 
     }
     
@@ -97,43 +96,34 @@ export async function onRequest(context) {
     //    Required because Github returns "text/plain" for all text types.
     const responseFileExtension = fileExtensionFromURLString(response.url);
     if (responseFileExtension === "html") {
-        
         const headers = newHeadersByModifyingMIMEType(
             response.headers, 
             "text/html; charset=UTF-8"
         );
+        // Github sets content security policy, so it needs to be deleted or changed
         headers.delete("content-security-policy");
-        
         const options = newResponseOptionsFromResponse(response, headers);
-        
-        // HACK; Fully download body so its only the text
-        const bodyText = await response.text();
-        
-        logObjectIfTrue("---- HTML", ISDEBUG);
-        return new Response(bodyText, options);
+        logObjectIfTrue(headers.get("content-type") + ": Modified Content Type", ISDEBUG);
+        return new Response(response.body, options);
     } else if (responseFileExtension === "css") {
         const headers = newHeadersByModifyingMIMEType(
             response.headers, 
             "text/css; charset=UTF-8"
         );
-        
         const options = newResponseOptionsFromResponse(response, headers);
-        
-        logObjectIfTrue("---- CSS", ISDEBUG);
+        logObjectIfTrue(headers.get("content-type") + ": Modified Content Type", ISDEBUG);
         return new Response(response.body, options);
     } else if (responseFileExtension === "js") {
         const headers = newHeadersByModifyingMIMEType(
             response.headers, 
             "text/javascript; charset=UTF-8"
         );
-        
         const options = newResponseOptionsFromResponse(response, headers);
-        
-        logObjectIfTrue("---- JS", ISDEBUG);
+        logObjectIfTrue(headers.get("content-type") + ": Modified Content Type", ISDEBUG);
         return new Response(response.body, options);
     } else {
-        // 4.0 fallback to just returning the response
-        logObjectIfTrue("---- Other", ISDEBUG);
+        // If not HTML/CSS/JS then the MIME type set by Github should be correct
+        logObjectIfTrue(response.headers.get("content-type") + ": Original Content Type", ISDEBUG);
         return response
     }
 }
