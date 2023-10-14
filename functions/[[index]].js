@@ -121,6 +121,13 @@ export async function onRequest(context) {
         const options = newResponseOptionsFromResponse(response, headers);
         logObjectIfTrue(headers.get("content-type") + ": Modified Content Type", ISDEBUG);
         return new Response(response.body, options);
+    } else if (responseFileExtension === "php") {
+        const options = {
+            status:     404,
+            statusText: "File not found",
+        };
+        logObjectIfTrue("PHP: Force 404", ISDEBUG);
+        return new Response("404 File not found", options);
     } else {
         // If not HTML/CSS/JS then the MIME type set by Github should be correct
         logObjectIfTrue(response.headers.get("content-type") + ": Original Content Type", ISDEBUG);
