@@ -57,6 +57,13 @@ function newHeadersByModifyingMIMEType(headers, mime) {
     return output;
 }
 
+function new404Response() {
+    const options = {
+        status: 404,
+    };
+    return new Response("404: URLの記載ミス", options);
+}
+
 function logObjectIfTrue(object, flag) {
     if (flag) {
         console.log(JSON.stringify(object, null, 4));
@@ -67,33 +74,45 @@ function logObjectIfTrue(object, flag) {
 export async function onRequest(context) {
     
     // Environment Variables
-    const ALWAYS_REDIRECT = context.env.ALWAYS_REDIRECT === "true";
-    const ISDEBUG         = context.env.DEBUG === "true";
-    const DESTINATION     = context.env.DEST_BASE_URL;
-    const INDEX           = context.env.INDEX_FILE_NAME;
+    const SPECIAL_REDIRECT = JSON.parse(context.env.SPECIAL_REDIRECT);
+    const ALWAYS_REDIRECT  = context.env.ALWAYS_REDIRECT === "true";
+    const ISDEBUG          = context.env.DEBUG === "true";
+    const DESTINATION      = context.env.DEST_BASE_URL;
+    const INDEX            = context.env.INDEX_FILE_NAME;
+    
+    logObjectIfTrue("Start: " + context.functionPath, ISDEBUG);
     
     // Always safe fallback; Redirect
     if (ALWAYS_REDIRECT === true) {
+        logObjectIfTrue("Force Redirect: " + DESTINATION + context.functionPath, ISDEBUG);
         return Response.redirect(DESTINATION + context.functionPath, 301);
     }
     
-    // 1. Get the request URL
+    // Check for special redirect
+    const redirect = SPECIAL_REDIRECT[context.functionPath];
+    if (redirect != null) {
+        logObjectIfTrue("Special Redirect: " + redirect);
+        return Response.redirect(redirect, 301);
+    }
+    
+    // Get the request URL
     const requestURLString = urlStringByAppendingFileNameIfNeededToURLString(
         INDEX, 
         DESTINATION + context.functionPath
     );
     
-    // 2. Perform the request to the destination
+    // Perform the request to the destination
+    logObjectIfTrue("Request: " + requestURLString, ISDEBUG);
     const response = await fetch(requestURLString, newRequestOptionsFromRequest(context.request));
     logObjectIfTrue(response.status + ": " + response.statusText, ISDEBUG);
 
-    // 3. Guard statement to bail if the response code is not success
+    // Guard statement to bail if the response code is not success
     if (isSuccessStatusCodeNumber(response.status) === false) {
         return response; 
     }
     
-    // 4. Check the file type and then set the correct MIME type.
-    //    Required because Github returns "text/plain" for all text types.
+    // Check the file type and then set the correct MIME type.
+    // Required because Github returns "text/plain" for all text types.
     const responseFileExtension = fileExtensionFromURLString(response.url);
     if (responseFileExtension === "html") {
         const headers = newHeadersByModifyingMIMEType(
@@ -122,12 +141,8 @@ export async function onRequest(context) {
         logObjectIfTrue(headers.get("content-type") + ": Modified Content Type", ISDEBUG);
         return new Response(response.body, options);
     } else if (responseFileExtension === "php") {
-        const options = {
-            status:     404,
-            statusText: "File not found",
-        };
-        logObjectIfTrue("PHP: Force 404", ISDEBUG);
-        return new Response("404 File not found", options);
+        logObjectIfTrue("Force 404: " + context.functionPath, ISDEBUG);
+        return new404Response();
     } else {
         // If not HTML/CSS/JS then the MIME type set by Github should be correct
         logObjectIfTrue(response.headers.get("content-type") + ": Original Content Type", ISDEBUG);
