@@ -65,7 +65,7 @@ function new404Response() {
 }
 
 /// Global Variable to Enable Extra Logging.
-/// This is configured by environment variable in `onRequest()`.
+/// This is configured by an environment variable in `onRequest()`.
 var あぶないISDEBUG = true;
 
 function LOG(object) {
@@ -75,22 +75,23 @@ function LOG(object) {
     var error;
     var line = -2;
     
-    /* // Failed attempt to find the line number by creating an exception
-       // https://kaihao.dev/posts/console-log-with-line-numbers
+    // Failed attempt to find the line number by creating an exception.
+    // Logic works but Cloudflare optimizes the javascript,
+    // so the line numbers don't match the source file.
+    // https://kaihao.dev/posts/console-log-with-line-numbers
     try {
         throw new Error();
     } catch (_error) {
         error = _error;
     }
     try {
-        const stacks = err.stack.split('\\n');
+        const stacks = error.stack.split('\n');
         const [, _line] = STACK_LINE_REGEX.exec(stacks[2]);
-        line = _line;
+        line = _line; // typeof = string
     } catch (error) {
         console.log(error);
         line = -1;
     }
-    */
     
     const kind = typeof object;
     if (kind === "string" 
@@ -111,7 +112,7 @@ function LOG(object) {
 export async function onRequest(context) {
     
     // Environment Variables
-    あぶないISDEBUG         = context.env.DEBUG === "true";
+    あぶないISDEBUG          = context.env.DEBUG === "true";
     const SPECIAL_REDIRECT = JSON.parse(context.env.SPECIAL_REDIRECT);
     const ALWAYS_REDIRECT  = context.env.ALWAYS_REDIRECT === "true";
     const DESTINATION      = context.env.DEST_BASE_URL;
