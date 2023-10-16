@@ -31,11 +31,7 @@ function newResponseOptionsFromResponse(response, replacementHeaders) {
 
 /// Checks if the status code is some form of HTTP success
 function isSuccessStatusCodeNumber(code) {
-    if (code >= 200 && code < 400) {
-        return true;
-    } else {
-        return false;
-    }
+    return (code >= 200 && code < 400);
 }
 
 /// Gets file extension from a URL and lowercases it.
@@ -104,7 +100,7 @@ function LOG(object) {
     {
         console.log(`[${line}] ${object}`);
     } else {
-        console.log(`[]${line}] ` + JSON.stringify(object, null, 4));
+        console.log(`[${line}] ` + JSON.stringify(object, null, 4));
     }
 }
 
@@ -113,8 +109,8 @@ export async function onRequest(context) {
     
     // Environment Variables
     あぶないISDEBUG          = context.env.DEBUG === "true";
-    const SPECIAL_REDIRECT = JSON.parse(context.env.SPECIAL_REDIRECT);
     const ALWAYS_REDIRECT  = context.env.ALWAYS_REDIRECT === "true";
+    const SPECIAL_REDIRECT = JSON.parse(context.env.SPECIAL_REDIRECT);
     const DESTINATION      = context.env.DEST_BASE_URL;
     const INDEX            = context.env.INDEX_FILE_NAME;
     
