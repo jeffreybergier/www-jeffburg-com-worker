@@ -69,7 +69,7 @@ function LOG(object) {
     
     const STACK_LINE_REGEX = /(\d+):(\d+)\)?$/;
     var error;
-    var line = -2;
+    var line = "-2";
     
     // Failed attempt to find the line number by creating an exception.
     // Logic works but Cloudflare optimizes the javascript,
@@ -86,7 +86,7 @@ function LOG(object) {
         line = _line; // typeof = string
     } catch (error) {
         console.log(error);
-        line = -1;
+        line = "-1";
     }
     
     const kind = typeof object;
@@ -181,6 +181,6 @@ export async function onRequest(context) {
     } else {
         // If not HTML/CSS/JS then the MIME type set by Github should be correct
         LOG("[End] Return Original MIME: " + response.headers.get("content-type"));
-        return response
+        return response;
     }
 }
