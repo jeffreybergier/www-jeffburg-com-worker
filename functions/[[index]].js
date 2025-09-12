@@ -1,186 +1,138 @@
 ///
-/// Here is my super shitty http proxy between my website and github.
+/// Cloudflare Function: GitHub Proxy
+/// Proxies requests to a GitHub repo and fixes MIME types.
 ///
 
-/// For URL's that do not include a filename, appends the provided filename
+// --- Utility Functions ---
+
 function urlStringByAppendingFileNameIfNeededToURLString(fileName, url) {
-    const lastPathComponent = url.split("/").slice(-1).pop();
-    if (lastPathComponent.includes(".")) {
-        return url;
-    } else {
-        return url + fileName;
-    }
+  const lastPathComponent = url.split("/").slice(-1).pop();
+  if (lastPathComponent.includes(".")) {
+    return url;
+  } else {
+    return url + fileName;
+  }
 }
 
-/// Prepares an options object for a request
-function newRequestOptionsFromRequest(request) {
-    return {
-      body:    request.body,
-      method:  request.method,
-      headers: request.headers,
-    };
+function safeHeaders(request) {
+  const out = new Headers();
+  request.headers.forEach((v, k) => {
+    const lower = k.toLowerCase();
+    if (!["host", "cf-connecting-ip", "x-forwarded-for", "content-length"].includes(lower)) {
+      out.set(k, v);
+    }
+  });
+  return out;
 }
 
 function newResponseOptionsFromResponse(response, replacementHeaders) {
-    return {
-        status:     response.status,
-        statusText: response.statusText,
-        headers:    replacementHeaders,
-    };
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    headers: replacementHeaders,
+  };
 }
 
-/// Checks if the status code is some form of HTTP success
 function isSuccessStatusCodeNumber(code) {
-    return (code >= 200 && code < 400);
+  return code >= 200 && code < 400;
 }
 
-/// Gets file extension from a URL and lowercases it.
 function fileExtensionFromURLString(url) {
-    return (new URL(url)).pathname
-                         .split("/").slice(-1).pop() // lastPathComponent
-                         .split(".").slice(-1).pop() // fileExtension
-                         .toLowerCase();
+  return new URL(url).pathname.split("/").slice(-1).pop().split(".").slice(-1).pop().toLowerCase();
 }
 
-/// Creates new headers by copying the given headers
-/// and setting the new mime type for Content-Type
 function newHeadersByModifyingMIMEType(headers, mime) {
-    const output = new Headers();
-    headers.forEach((value, key) => {
-        output.set(key, value);
-    });
-    output.set("content-type", mime);
-    return output;
+  const output = new Headers();
+  headers.forEach((value, key) => {
+    output.set(key, value);
+  });
+  output.set("content-type", mime);
+  output.delete("content-security-policy"); // always strip CSP
+  return output;
 }
 
 function new404Response() {
-    const options = {
-        status: 404,
-    };
-    return new Response("404: URLの記載ミス", options);
+  return new Response("404: URLの記載ミス", { status: 404 });
 }
 
-/// Global Variable to Enable Extra Logging.
-/// This is configured by an environment variable in `onRequest()`.
+// --- MIME Overrides ---
+
+const MIME_OVERRIDES = {
+  html: "text/html; charset=UTF-8",
+  css: "text/css; charset=UTF-8",
+  js: "text/javascript; charset=UTF-8",
+};
+
+function overrideMIME(ext, response) {
+  const mime = MIME_OVERRIDES[ext];
+  if (!mime) return response; // pass-through
+
+  const headers = newHeadersByModifyingMIMEType(response.headers, mime);
+  const options = newResponseOptionsFromResponse(response, headers);
+  return new Response(response.body, options);
+}
+
+// --- Logging ---
+
 var あぶないISDEBUG = true;
-
-function LOG(object) {
-    if (あぶないISDEBUG === false) { return; }
-    
-    const STACK_LINE_REGEX = /(\d+):(\d+)\)?$/;
-    var error;
-    var line = "-2";
-    
-    // Failed attempt to find the line number by creating an exception.
-    // Logic works but Cloudflare optimizes the javascript,
-    // so the line numbers don't match the source file.
-    // https://kaihao.dev/posts/console-log-with-line-numbers
-    try {
-        throw new Error();
-    } catch (_error) {
-        error = _error;
-    }
-    try {
-        const stacks = error.stack.split('\n');
-        const [, _line] = STACK_LINE_REGEX.exec(stacks[2]);
-        line = _line; // typeof = string
-    } catch (error) {
-        console.log(error);
-        line = "-1";
-    }
-    
-    const kind = typeof object;
-    if (kind === "string" 
-     || kind === "number" 
-     || kind === "bigint"
-     || kind === "boolean"
-     || kind === "undefined"
-     || kind === "symbol"
-     || kind === null) 
-    {
-        console.log(`[${line}] ${object}`);
-    } else {
-        console.log(`[${line}] ` + JSON.stringify(object, null, 4));
-    }
+function LOG(msg) {
+  if (あぶないISDEBUG) console.log(msg);
 }
 
-/// MARK: Cloudflare Framework Call
-export async function onRequest(context) {
-    
-    // Environment Variables
-    あぶないISDEBUG          = context.env.DEBUG === "true";
-    const ALWAYS_REDIRECT  = context.env.ALWAYS_REDIRECT === "true";
-    const SPECIAL_REDIRECT = JSON.parse(context.env.SPECIAL_REDIRECT);
-    const DESTINATION      = context.env.DEST_BASE_URL;
-    const INDEX            = context.env.INDEX_FILE_NAME;
-    
-    LOG("[Begin] " + context.functionPath);
-    
-    // Always safe fallback; Redirect
-    if (ALWAYS_REDIRECT === true) {
-        LOG("[End] ALWAYS_REDIRECT: " + DESTINATION + context.functionPath);
-        return Response.redirect(DESTINATION + context.functionPath, 301);
-    }
-    
-    // Check for special redirect
-    const redirect = SPECIAL_REDIRECT[context.functionPath];
-    if (redirect != null) {
-        LOG("[End] SPECIAL_REDIRECT: " + redirect);
-        return Response.redirect(redirect, 301);
-    }
-    
-    // Get the request URL
-    const requestURLString = urlStringByAppendingFileNameIfNeededToURLString(
-        INDEX, 
-        DESTINATION + context.functionPath
-    );
-    
-    // Perform the request to the destination
-    LOG("[Internal] Request: " + requestURLString);
-    const response = await fetch(requestURLString, newRequestOptionsFromRequest(context.request));
-    LOG("[Internal] Response: " + response.status + ": " + response.headers.get("content-type"));
+// --- Cloudflare Entry Point ---
 
-    // Guard statement to bail if the response code is not success
-    if (isSuccessStatusCodeNumber(response.status) === false) {
-        LOG("[End] Return Internal Response: Bad Status Code");
-        return response; 
-    }
-    
-    // Check the file type and then set the correct MIME type.
-    // Required because Github returns "text/plain" for all text types.
-    const responseFileExtension = fileExtensionFromURLString(response.url);
-    if (responseFileExtension === "html") {
-        const headers = newHeadersByModifyingMIMEType(
-            response.headers, 
-            "text/html; charset=UTF-8"
-        );
-        // Github sets content security policy, so it needs to be deleted or changed
-        headers.delete("content-security-policy");
-        const options = newResponseOptionsFromResponse(response, headers);
-        LOG("[End] Return Modified MIME: " + headers.get("content-type"));
-        return new Response(response.body, options);
-    } else if (responseFileExtension === "css") {
-        const headers = newHeadersByModifyingMIMEType(
-            response.headers, 
-            "text/css; charset=UTF-8"
-        );
-        const options = newResponseOptionsFromResponse(response, headers);
-        LOG("[End] Return Modified MIME: " + headers.get("content-type"));
-        return new Response(response.body, options);
-    } else if (responseFileExtension === "js") {
-        const headers = newHeadersByModifyingMIMEType(
-            response.headers, 
-            "text/javascript; charset=UTF-8"
-        );
-        const options = newResponseOptionsFromResponse(response, headers);
-        LOG("[End] Return Modified MIME: " + headers.get("content-type"));
-        return new Response(response.body, options);
-    } else if (responseFileExtension === "php") {
-        LOG("[End] Force 404: Requested PHP" + headers.get("content-type"));
-        return new404Response();
-    } else {
-        // If not HTML/CSS/JS then the MIME type set by Github should be correct
-        LOG("[End] Return Original MIME: " + response.headers.get("content-type"));
-        return response;
-    }
+export async function onRequest(context) {
+  // Environment
+  あぶないISDEBUG = context.env.DEBUG === "true";
+  const ALWAYS_REDIRECT = context.env.ALWAYS_REDIRECT === "true";
+  const SPECIAL_REDIRECT = JSON.parse(context.env.SPECIAL_REDIRECT || "{}");
+  const DESTINATION = context.env.DEST_BASE_URL;
+  const INDEX = context.env.INDEX_FILE_NAME;
+
+  LOG(`[Begin] ${context.functionPath}`);
+
+  // Always redirect if configured
+  if (ALWAYS_REDIRECT) {
+    LOG(`[Redirect] Always → ${DESTINATION}${context.functionPath}`);
+    return Response.redirect(DESTINATION + context.functionPath, 301);
+  }
+
+  // Special redirect mapping
+  const redirect = SPECIAL_REDIRECT[context.functionPath];
+  if (redirect) {
+    LOG(`[Redirect] Special → ${redirect}`);
+    return Response.redirect(redirect, 301);
+  }
+
+  // Build target URL
+  const target = urlStringByAppendingFileNameIfNeededToURLString(
+    INDEX,
+    DESTINATION + context.functionPath
+  );
+
+  LOG(`[Fetch] → ${target}`);
+  const response = await fetch(target, {
+    method: context.request.method,
+    body: context.request.body,
+    headers: safeHeaders(context.request),
+  });
+
+  LOG(`[Response] ${response.status} ${response.headers.get("content-type")}`);
+
+  // Bail out if not success
+  if (!isSuccessStatusCodeNumber(response.status)) {
+    LOG(`[End] Bad status → ${response.status}`);
+    return response; // or replace with new404Response() if you want custom
+  }
+
+  // Extension handling
+  const ext = fileExtensionFromURLString(response.url);
+  if (ext === "php" || ["exe", "cgi", "sh"].includes(ext)) {
+    LOG(`[End] Blocked extension → .${ext}`);
+    return new404Response();
+  }
+
+  const finalResponse = overrideMIME(ext, response);
+  LOG(`[End] Served ${ext || "unknown"} → ${finalResponse.headers.get("content-type")}`);
+  return finalResponse;
 }
