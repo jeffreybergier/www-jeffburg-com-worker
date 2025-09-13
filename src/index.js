@@ -13,11 +13,11 @@ export default {
     // staging.jeffburg.com -> "staging"
     const subdomain = host.split(".")[0];
 
-    // Default to "main" branch if you want a fallback
-    const branch = subdomain || "main";
+    // Default to "www" branch if you want a fallback
+    const branch = subdomain || "www";
 
     // Build destination base URL
-    const DESTINATION = `https://raw.githubusercontent.com/${REPO}/${branch}/PortfolioSite`;
+    const DESTINATION = `https://raw.githubusercontent.com/${REPO}/${branch}/web-root`;
 
     // Preserve request path
     let path = url.pathname;
