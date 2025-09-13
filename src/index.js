@@ -6,17 +6,19 @@ export default {
 
     // Parse incoming request
     const url = new URL(request.url);
-    const host = url.hostname; // e.g., "www.jeffburg.com" or "staging.jeffburg.com"
 
-    // Extract branch from the subdomain (everything before first dot)
-    // www.jeffburg.com  -> "www"
-    // staging.jeffburg.com -> "staging"
-    const subdomain = host.split(".")[0];
-
-    // Default to "www" branch if you want a fallback
-    const branch = subdomain || "www";
-
-    // Build destination base URL
+    // Map subdomain → branch
+    const branchMap = {
+      "www": "www",
+      "staging": "staging",
+    };
+    
+    // Extract first part
+    const subdomain = url.hostname.split(".")[0];
+    
+    // Fallback: if subdomain not in map, default to "www"
+    const branch = branchMap[subdomain] || "www";
+    
     const DESTINATION = `https://raw.githubusercontent.com/${REPO}/${branch}/web-root`;
 
     // Preserve request path
@@ -25,7 +27,7 @@ export default {
 
     const targetUrl = DESTINATION + path;
 
-    console.log(`[Proxy] Host=${host}, Branch=${branch}, Path=${path} -> ${targetUrl}`);
+    console.log(`[Proxy] Host=${url.hostname}, Branch=${branch}, Path=${path} -> ${targetUrl}`);
 
     // Fetch from GitHub
     const resp = await fetch(targetUrl, { method: request.method });
