@@ -39,6 +39,8 @@ export default {
     else if (ext === "css") contentType = "text/css; charset=UTF-8";
     else if (ext === "js") contentType = "text/javascript; charset=UTF-8";
     else if (ext === "xml" || ext === "plist") contentType = "application/xml; charset=UTF-8";
+    else if (ext === "mp4") contentType = "video/mp4";
+    else if (ext === "mov") contentType = "video/quicktime";
     else contentType = resp.headers.get("content-type") || "application/octet-stream";
 
     // Adjust headers
