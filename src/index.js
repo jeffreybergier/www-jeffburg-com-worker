@@ -1,32 +1,30 @@
 export default {
   async fetch(request, env, ctx) {
-    // Your GitHub repo name
-    const REPO = "jeffreybergier/www-jeffburg-com";
+    const REPO = "jeffreybergier/jeffreybergier.github.io";
     const INDEX = "index.html";
 
-    // Parse incoming request
     const url = new URL(request.url);
 
     // Map subdomain → branch
     const branchMap = {
-      "www": "www",
-      "staging": "staging",
+      "insecure": "insecure",
+      "staging" : "staging",
     };
-    
-    // Extract first part
-    const subdomain = url.hostname.split(".")[0];
-    
-    // Fallback: if subdomain not in map, default to "www"
-    const branch = branchMap[subdomain] || "www";
-    
-    const DESTINATION = `https://raw.githubusercontent.com/${REPO}/${branch}/web-root`;
 
+    // Determine branch
+    const subdomain = url.hostname.split(".")[0];
+    var branch = branchMap[subdomain] || "insecure";
+    if (branch == "insecure") {
+      // special case for insecure to use the default gh-pages branch
+      branch = "gh-pages"
+    }
+    
+    const DESTINATION = `https://raw.githubusercontent.com/${REPO}/${branch}`;
+    
     // Preserve request path
     let path = url.pathname;
     if (path.endsWith("/")) path += INDEX;
-
     const targetUrl = DESTINATION + path;
-
     console.log(`[Proxy] Host=${url.hostname}, Branch=${branch}, Path=${path} -> ${targetUrl}`);
 
     // Fetch from GitHub
